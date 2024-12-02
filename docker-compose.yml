@@ -1,0 +1,77 @@
+services:
+    coolify:
+        image: coollabsio/coolify:latest
+        container_name: coolify
+        restart: always
+        working_dir: /var/www/html
+        extra_hosts:
+            - host.docker.internal:host-gateway
+        networks:
+            - coolify
+        depends_on:
+            - postgres
+            - redis
+            - soketi
+            - appflowy
+    postgres:
+        image: postgres:15-alpine
+        container_name: coolify-db
+        restart: always
+        networks:
+            - coolify
+    redis:
+        image: redis:7-alpine
+        container_name: coolify-redis
+        restart: always
+        networks:
+            - coolify
+    soketi:
+        build:
+            context: ./docker/coolify-realtime
+            dockerfile: Dockerfile.appflowy
+        container_name: coolify-realtime
+        restart: always
+        networks:
+            - coolify
+        ports:
+            - "6001:6001"
+            - "6002:6002"
+        env_file:
+            - .env
+        volumes:
+            - ./storage:/var/www/html/storage
+        environment:
+            SOKETI_DEBUG: "false"
+            SOKETI_DEFAULT_APP_ID: "${PUSHER_APP_ID:-coolify}"
+            SOKETI_DEFAULT_APP_KEY: "${PUSHER_APP_KEY:-coolify}"
+            SOKETI_DEFAULT_APP_SECRET: "${PUSHER_APP_SECRET:-coolify}"
+        entrypoint: ["/bin/sh", "/soketi-entrypoint.sh"]
+    appflowy:
+        build:
+            context: ./appflowy
+            dockerfile: Dockerfile.appflowy
+        container_name: appflowy
+        restart: always
+        networks:
+            - coolify
+        ports:
+            - "3000:3000"
+        environment:
+            APP_ENV: "development"
+            APP_PORT: "3000"
+    nginx:
+        image: nginx:alpine
+        container_name: coolify-nginx
+        restart: always
+        ports:
+            - "80:80"
+        volumes:
+            - ./nginx/appflowy.conf:/etc/nginx/conf.d/appflowy.conf
+        networks:
+            - coolify
+
+networks:
+    coolify:
+        name: coolify
+        driver: bridge
+        external: false
